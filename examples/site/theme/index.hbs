@@ -1,0 +1,11 @@
+{{!< default}}
+
+<section class="post-feed">
+  {{#foreach posts}}
+    {{> "post-card"}}
+  {{else}}
+    <p class="post-feed-empty">There are no posts yet.</p>
+  {{/foreach}}
+</section>
+
+{{pagination}}

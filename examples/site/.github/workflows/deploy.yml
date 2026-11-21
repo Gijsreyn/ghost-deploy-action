@@ -1,0 +1,50 @@
+name: Deploy to Ghost
+
+# Brings the Ghost site in line with this repository on every push to main: the theme, the tags, the pages and
+# the posts. Only what differs is sent.
+on:
+  push:
+    branches: [main]
+    paths:
+      - theme/**
+      - tags/**
+      - pages/**
+      - posts/**
+      - .github/workflows/deploy.yml
+  # A run that is started by hand. With a commit in base-ref it also removes what was removed since that commit,
+  # which is how the site is put right after a run that failed.
+  workflow_dispatch:
+    inputs:
+      base-ref:
+        description: Remove what was removed from the repository since this commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One deployment at a time, in the order of the pushes. A deployment that runs is never cancelled halfway.
+concurrency:
+  group: deploy-to-ghost
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Deploy to Ghost
+        uses: Gijsreyn/ghost-deploy-action@v1
+        with:
+          api-url: ${{ secrets.GHOST_ADMIN_API_URL }}
+          api-key: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          theme: theme
+          tags: tags
+          pages: pages
+          posts: posts
+          # A post, a page or a tag whose file was removed in this push is removed from the site.
+          delete: true
+          base-ref: ${{ inputs.base-ref }}

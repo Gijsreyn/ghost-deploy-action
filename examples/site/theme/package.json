@@ -1,0 +1,24 @@
+{
+  "name": "ghost-deploy-example",
+  "description": "A small theme that shows how a custom theme is deployed from a repository.",
+  "version": "1.0.0",
+  "engines": {
+    "ghost": ">=5.0.0"
+  },
+  "author": {
+    "name": "Example",
+    "email": "theme@example.com"
+  },
+  "config": {
+    "posts_per_page": 10,
+    "card_assets": true,
+    "image_sizes": {
+      "m": {
+        "width": 800
+      },
+      "l": {
+        "width": 1400
+      }
+    }
+  }
+}

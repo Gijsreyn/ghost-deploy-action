@@ -1,0 +1,209 @@
+name: CI
+
+# The unit tests and PSScriptAnalyzer on the three systems that the action runs on, and then the action itself
+# against a Ghost site that is installed on the runner for the run. That site is new and thrown away afterwards,
+# so the workflow needs no secrets and also runs for pull requests from forks.
+#
+# After a push to main, when all of that passed, the job release publishes a new version of the action. It is
+# the only job that may write to the repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new run replaces the one before it for the same branch or pull request. A run for main is never stopped,
+# because it may be in the middle of a release. The next run for main waits for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Unit tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Install Pester and PSScriptAnalyzer
+        run: ./build/install.ps1
+
+      - name: Run the unit tests
+        run: ./build/Invoke-RunTests.ps1
+
+      - name: Upload the test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults/*.xml
+          if-no-files-found: ignore
+
+  action:
+    name: The action against a Ghost site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # Ghost runs on the LTS versions of Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The module Ghost installs and starts the site, in the version that action.yml names. It puts the address
+      # and the key of the site in GHOST_ADMIN_API_URL and GHOST_ADMIN_API_KEY for the steps that follow.
+      - name: Start a Ghost site on the runner
+        run: |
+          $text = Get-Content -LiteralPath ./action.yml -Raw
+          if ($text -notmatch "(?s)module-version:.*?default: '(?<version>[^']+)'") {
+              throw 'The version of the module was not found in action.yml.'
+          }
+          Install-PSResource -Name Ghost -Version $Matches['version'] -TrustRepository
+          Start-GhostLocalSite -Path ./.local-ghost | Select-Object -Property Url, Version | Format-List
+
+      # The example site as a repository of its own, in the folder fixture. The run id makes its theme differ
+      # from the one of any earlier run.
+      - name: Make a repository from the example site
+        run: ./tests/Set-ExampleRepository.ps1 -Path ./fixture -Step First -Marker "run ${{ github.run_id }}"
+
+      - name: Dry run of the first deployment
+        id: plan
+        uses: ./
+        with:
+          api-url: ${{ env.GHOST_ADMIN_API_URL }}
+          api-key: ${{ env.GHOST_ADMIN_API_KEY }}
+          theme: fixture/theme
+          tags: fixture/tags
+          pages: fixture/pages
+          posts: fixture/posts
+          dry-run: true
+
+      - name: The first deployment
+        id: first
+        uses: ./
+        with:
+          api-url: ${{ env.GHOST_ADMIN_API_URL }}
+          api-key: ${{ env.GHOST_ADMIN_API_KEY }}
+          theme: fixture/theme
+          tags: fixture/tags
+          pages: fixture/pages
+          posts: fixture/posts
+
+      # Publishes the post, changes the theme and removes the page.
+      - name: Take the next step of the guide
+        run: ./tests/Set-ExampleRepository.ps1 -Path ./fixture -Step Second
+
+      - name: Deploy the second commit and remove what it removed
+        id: second
+        uses: ./
+        with:
+          api-url: ${{ env.GHOST_ADMIN_API_URL }}
+          api-key: ${{ env.GHOST_ADMIN_API_KEY }}
+          theme: fixture/theme
+          tags: fixture/tags
+          pages: fixture/pages
+          posts: fixture/posts
+          delete: true
+          base-ref: HEAD~1
+
+      # The outputs of each run as created, updated, removed and unchanged. They come from what Ghost answered,
+      # so they also show that the inputs and the outputs of action.yml are wired to the script.
+      - name: Check what the three runs reported
+        env:
+          PLAN: >-
+            ${{ steps.plan.outputs.created }} ${{ steps.plan.outputs.updated }}
+            ${{ steps.plan.outputs.removed }} ${{ steps.plan.outputs.unchanged }} ${{ steps.plan.outputs.changed }}
+          FIRST: >-
+            ${{ steps.first.outputs.created }} ${{ steps.first.outputs.updated }}
+            ${{ steps.first.outputs.removed }} ${{ steps.first.outputs.unchanged }} ${{ steps.first.outputs.changed }}
+          SECOND: >-
+            ${{ steps.second.outputs.created }} ${{ steps.second.outputs.updated }}
+            ${{ steps.second.outputs.removed }} ${{ steps.second.outputs.unchanged }} ${{ steps.second.outputs.changed }}
+        run: |
+          $expected = [ordered]@{
+              PLAN   = '3 1 0 0 true'
+              FIRST  = '3 1 0 0 true'
+              SECOND = '0 2 1 1 true'
+          }
+          $failed = $false
+          foreach ($name in $expected.Keys) {
+              $actual = [System.Environment]::GetEnvironmentVariable($name)
+              if ($actual -eq $expected[$name]) {
+                  "ok      $name reported $actual"
+              }
+              else {
+                  "FAILED  $name reported '$actual' and '$($expected[$name])' was expected"
+                  $failed = $true
+              }
+          }
+          if ($failed) {
+              throw 'The action did not report what was expected.'
+          }
+
+      - name: Show the log of Ghost
+        if: failure()
+        run: Get-ChildItem -Path ./.local-ghost/content/logs -Filter *.log | Get-Content -Tail 100
+
+  # Publishes the action with semantic-release. The messages of the commits since the last release decide
+  # whether there is a new version and which one. A push with only docs, test or chore commits releases nothing.
+  release:
+    name: Release
+    needs: [test, action]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the tags and the release
+      issues: write          # a comment on every issue that the release closes
+      pull-requests: write   # a comment on every pull request that is in the release
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # All commits and all tags. semantic-release reads the commits since the tag of the last release.
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Exactly the versions of release/package-lock.json, without running the install scripts of a package.
+      - name: Install semantic-release
+        working-directory: release
+        run: npm ci --ignore-scripts
+
+      # Fails when a package is not the one that its maintainers published to npm.
+      - name: Check the signatures of the packages
+        working-directory: release
+        run: npm audit signatures
+
+      # Makes the tag v<major>.<minor>.<patch> and the release on GitHub, with notes from the commit messages.
+      # When the commits ask for no release, it says so and the step passes.
+      - name: Release
+        working-directory: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      # Workflows name the action as @v1. This points v1 at the release that was just made.
+      - name: Move the tag of the major version
+        run: ./build/Update-MajorTag.ps1

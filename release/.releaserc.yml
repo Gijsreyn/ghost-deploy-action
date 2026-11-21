@@ -1,0 +1,23 @@
+# The settings of semantic-release. The job release of the workflow CI runs it in this folder, after a push to
+# main whose tests passed. It reads the commits since the last release, works out the next version from their
+# messages, and makes the tag and the release on GitHub. AGENTS.md says which message gives which version.
+
+# Only main is released.
+branches:
+  - main
+
+# The tag of a release, such as v1.4.2. build/Update-MajorTag.ps1 moves the tag v1 to it afterwards.
+tagFormat: v${version}
+
+# How a commit message is read: https://www.conventionalcommits.org. It stands here and not with a plugin,
+# because both plugins that read the messages need it.
+preset: conventionalcommits
+
+# The plugin for npm is left out. The action is not a package.
+plugins:
+  # Works out the next version. A fix gives a patch, a feat a minor version and a breaking change a major one.
+  - '@semantic-release/commit-analyzer'
+  # Writes the notes of the release from the same messages.
+  - '@semantic-release/release-notes-generator'
+  # Makes the release on GitHub, and tells the issues and pull requests in it which version has them.
+  - '@semantic-release/github'

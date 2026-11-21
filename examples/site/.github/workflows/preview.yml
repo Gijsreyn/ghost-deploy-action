@@ -1,0 +1,39 @@
+name: Preview the deployment
+
+# Shows on the page of a pull request run what merging would create, update and remove on the Ghost site.
+# Nothing is changed. A pull request from a fork does not get the secrets, so this workflow fails for one.
+on:
+  pull_request:
+    paths:
+      - theme/**
+      - tags/**
+      - pages/**
+      - posts/**
+      - .github/workflows/preview.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Preview
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Show what a deployment would do
+        uses: Gijsreyn/ghost-deploy-action@v1
+        with:
+          api-url: ${{ secrets.GHOST_ADMIN_API_URL }}
+          api-key: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          theme: theme
+          tags: tags
+          pages: pages
+          posts: posts
+          delete: true
+          dry-run: true

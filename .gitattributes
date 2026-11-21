@@ -1,0 +1,4 @@
+# Line feeds everywhere, so that the files are identical on Windows, Linux and macOS.
+* text=auto eol=lf
+
+*.png binary

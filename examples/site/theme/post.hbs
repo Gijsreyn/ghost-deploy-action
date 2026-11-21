@@ -1,0 +1,31 @@
+{{!< default}}
+
+{{#post}}
+  <article class="post {{post_class}}">
+    <header class="post-header">
+      <h1 class="post-title">{{title}}</h1>
+      <p class="post-meta">
+        <time datetime="{{date format="YYYY-MM-DD"}}">{{date format="D MMMM YYYY"}}</time>
+        {{#primary_author}}
+          by {{name}}
+        {{/primary_author}}
+      </p>
+      {{#if feature_image}}
+        <figure class="post-image">
+          <img src="{{img_url feature_image size="l"}}" alt="{{#if feature_image_alt}}{{feature_image_alt}}{{else}}{{title}}{{/if}}">
+          {{#if feature_image_caption}}
+            <figcaption>{{feature_image_caption}}</figcaption>
+          {{/if}}
+        </figure>
+      {{/if}}
+    </header>
+
+    <div class="post-content gh-content">
+      {{content}}
+    </div>
+
+    {{#if tags}}
+      <footer class="post-tags">{{tags separator=", " prefix="Filed under "}}</footer>
+    {{/if}}
+  </article>
+{{/post}}

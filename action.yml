@@ -1,0 +1,110 @@
+name: Deploy to Ghost
+description: Create, update and remove the theme, tags, pages and posts of a Ghost site from the files of a repository.
+author: Gijs Reijn
+
+branding:
+  icon: upload-cloud
+  color: gray-dark
+
+inputs:
+  api-url:
+    description: The address of the Ghost site, such as https://example.org.
+    required: true
+  api-key:
+    description: >-
+      The Admin API key of a custom integration of the site, from Ghost Admin under Settings, Integrations.
+      Pass it as a secret.
+    required: true
+  theme:
+    description: >-
+      The folder or the zip file of a theme. It is uploaded and activated when the site does not show it yet.
+      Leave it out to leave the theme alone.
+    required: false
+    default: ''
+  theme-name:
+    description: The name to store the theme under. Without it the name in the package.json of the theme is used.
+    required: false
+    default: ''
+  tags:
+    description: The folder with a Markdown file per tag. Leave it out to leave the tags alone.
+    required: false
+    default: ''
+  pages:
+    description: The folder with the Markdown files of the pages. Leave it out to leave the pages alone.
+    required: false
+    default: ''
+  posts:
+    description: The folder with the Markdown files of the posts. Leave it out to leave the posts alone.
+    required: false
+    default: ''
+  delete:
+    description: >-
+      Set to true to remove the posts, pages and tags whose file was removed from the repository. Content that
+      never had a file is not touched.
+    required: false
+    default: 'false'
+  delete-limit:
+    description: The number of removed files that one run may act on. A run with more stops before it changes anything.
+    required: false
+    default: '10'
+  base-ref:
+    description: >-
+      The commit to compare the files with, to find the removed ones. Without it this is the commit before a
+      push, or the branch that a pull request goes into.
+    required: false
+    default: ''
+  dry-run:
+    description: Set to true to change nothing and report what a real run would create, update and remove.
+    required: false
+    default: 'false'
+  module-version:
+    description: The version of the PowerShell module Ghost to use. The default is the version this action was tested with.
+    required: false
+    default: '0.6.0'
+  module-path:
+    description: The folder of a copy of the module Ghost to use, instead of a version from the PowerShell Gallery.
+    required: false
+    default: ''
+
+outputs:
+  created:
+    description: How many tags, pages and posts were created, or would be in a dry run.
+    value: ${{ steps.deploy.outputs.created }}
+  updated:
+    description: How many themes, tags, pages and posts were updated, or would be in a dry run.
+    value: ${{ steps.deploy.outputs.updated }}
+  removed:
+    description: How many tags, pages and posts were removed, or would be in a dry run.
+    value: ${{ steps.deploy.outputs.removed }}
+  unchanged:
+    description: How many themes, tags, pages and posts were the same as their file.
+    value: ${{ steps.deploy.outputs.unchanged }}
+  changed:
+    description: The text true when something was created, updated or removed, or would be, and false otherwise.
+    value: ${{ steps.deploy.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    # A composite action does not get its inputs by itself. They are passed as environment variables, which
+    # also keeps their text out of the script that the runner writes for this step.
+    - name: Deploy to Ghost
+      id: deploy
+      shell: pwsh
+      env:
+        GHOST_DEPLOY_API_URL: ${{ inputs.api-url }}
+        GHOST_DEPLOY_API_KEY: ${{ inputs.api-key }}
+        GHOST_DEPLOY_THEME: ${{ inputs.theme }}
+        GHOST_DEPLOY_THEME_NAME: ${{ inputs.theme-name }}
+        GHOST_DEPLOY_TAGS: ${{ inputs.tags }}
+        GHOST_DEPLOY_PAGES: ${{ inputs.pages }}
+        GHOST_DEPLOY_POSTS: ${{ inputs.posts }}
+        GHOST_DEPLOY_DELETE: ${{ inputs.delete }}
+        GHOST_DEPLOY_DELETE_LIMIT: ${{ inputs.delete-limit }}
+        GHOST_DEPLOY_BASE_REF: ${{ inputs.base-ref }}
+        GHOST_DEPLOY_DRY_RUN: ${{ inputs.dry-run }}
+        GHOST_DEPLOY_MODULE_VERSION: ${{ inputs.module-version }}
+        GHOST_DEPLOY_MODULE_PATH: ${{ inputs.module-path }}
+      run: |
+        & (Join-Path -Path $env:GITHUB_ACTION_PATH -ChildPath 'src/Invoke-GhostDeploy.ps1')
+        exit $LASTEXITCODE

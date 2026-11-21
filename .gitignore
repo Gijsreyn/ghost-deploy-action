@@ -1,0 +1,14 @@
+# Output of build/Invoke-RunTests.ps1
+/TestResults/
+
+# Local secrets and settings
+.env
+.env.*
+*.local.ps1
+*.local.psd1
+
+# The local Ghost site of tests/Invoke-EndToEnd.ps1
+/.local-ghost/
+
+# semantic-release and what it needs, after npm ci in the folder release
+/release/node_modules/
