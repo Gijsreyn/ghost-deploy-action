@@ -60,7 +60,7 @@ inputs:
   module-version:
     description: The version of the PowerShell module Ghost to use. The default is the version this action was tested with.
     required: false
-    default: '0.6.0'
+    default: '0.6.1'
   module-path:
     description: The folder of a copy of the module Ghost to use, instead of a version from the PowerShell Gallery.
     required: false
